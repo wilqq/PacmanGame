@@ -4,9 +4,14 @@ LevelRoundState.prototype = {
   init: function () {
     this.speed = 100;
     this.currentDirection = null;
+    this.safeTile = 1;
+    this.score = 0;
+    this.scoreText = null;
   },
   preload: function () {
     this.load.image('logo', 'assets/logo.jpg');
+    this.load.image('dot', 'assets/dot.png');
+    this.load.image('big-dot', 'assets/big-dot.png');
     this.load.spritesheet('pacman', 'assets/pacman.png', 16, 16);
     this.load.image('tiles', 'maps/box-tiles.png');
     this.load.tilemap('level_1_map', 'maps/level_1_map.json', null, Phaser.Tilemap.TILED_JSON);
@@ -15,6 +20,20 @@ LevelRoundState.prototype = {
     this.map = this.add.tilemap('level_1_map');
     this.map.addTilesetImage('tiles', 'tiles');
     this.layer = this.map.createLayer('Layer1');
+
+    this.dots = this.add.physicsGroup();
+    this.map.createFromTiles(3, this.safeTile, 'dot', this.layer, this.dots);
+
+    this.bigDots = this.add.physicsGroup();
+    this.map.createFromTiles(4, this.safeTile, 'big-dot', this.layer, this.bigDots);
+
+    this.dots.setAll('x', 6, false, false, 1);
+    this.dots.setAll('y', 6, false, false, 1);
+
+    this.bigDots.setAll('x', 2, false, false, 1);
+    this.bigDots.setAll('y', 2, false, false, 1);
+
+    this.map.setCollisionByExclusion([this.safeTile]);
 
     this.pacman = this.add.sprite(14 * 16 + 8, 17 * 16 + 8, 'pacman', 0);
     this.pacman.anchor.set(0.5);
@@ -25,8 +44,14 @@ LevelRoundState.prototype = {
     this.physics.startSystem(Phaser.Physics.ARCADE);
 
     this.cursors = this.input.keyboard.createCursorKeys();
+
+    this.printScore();
   },
   update: function () {
+    this.physics.arcade.collide(this.pacman, this.layer);
+    this.physics.arcade.overlap(this.pacman, this.dots, this.eatDot, null, this);
+    this.physics.arcade.overlap(this.pacman, this.bigDots, this.eatBigDot, null, this);
+
     this.checkKeys();
   },
   checkKeys: function () {
@@ -65,5 +90,24 @@ LevelRoundState.prototype = {
     } else if (direction === Phaser.LEFT) {
       sprite.angle = 180;
     }
+  },
+  eatDot: function(_pacman, dot) {
+    dot.kill();
+    this.score += 10;
+    this.printScore();
+  },
+  eatBigDot: function(_pacman, dot) {
+    dot.kill();
+    this.score += 100;
+    this.printScore();
+  },
+  printScore: function() {
+    if (!this.scoreText) {
+      this.scoreText = this.add.text(
+        32, this.game.world.height - 28, '', { fontSize: '16px', fill: '#FFF' }
+      );
+    }
+
+    this.scoreText.setText('Score: ' + this.score);
   }
 }
