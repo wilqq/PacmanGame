@@ -7,13 +7,21 @@ LevelRoundState.prototype = {
     this.score = 0;
     this.scoreText = null;
     this.pacman = generateSpriteContainer();
+    this.pacman.rotateImage = true;
     this.opposites = [Phaser.NONE, Phaser.RIGHT, Phaser.LEFT, Phaser.DOWN, Phaser.UP];
+    this.ghosts = [];
+    this.ghostsSprites = null;
+
+    for(var i = 0; i < 4; i++) {
+      this.ghosts.push(generateSpriteContainer());
+    }
   },
   preload: function () {
     this.load.image('logo', 'assets/logo.jpg');
     this.load.image('dot', 'assets/dot.png');
     this.load.image('big-dot', 'assets/big-dot.png');
     this.load.spritesheet('pacman', 'assets/pacman.png', 16, 16);
+    this.load.spritesheet('ghosts', 'assets/ghosts.png', 16, 16);
     this.load.image('tiles', 'maps/box-tiles.png');
     this.load.tilemap('level_1_map', 'maps/level_1_map.json', null, Phaser.Tilemap.TILED_JSON);
   },
@@ -42,6 +50,8 @@ LevelRoundState.prototype = {
     this.pacman.sprite.play('move');
     this.physics.arcade.enable(this.pacman.sprite);
 
+    this.createGhosts();
+
     this.physics.startSystem(Phaser.Physics.ARCADE);
 
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -52,6 +62,7 @@ LevelRoundState.prototype = {
   },
   update: function () {
     this.physics.arcade.collide(this.pacman.sprite, this.layer);
+    this.physics.arcade.collide(this.ghostsSprites, this.layer, this.changeGhostDirection, null, this);
     this.physics.arcade.overlap(this.pacman.sprite, this.dots, this.eatDot, null, this);
     this.physics.arcade.overlap(this.pacman.sprite, this.bigDots, this.eatBigDot, null, this);
 
@@ -62,6 +73,10 @@ LevelRoundState.prototype = {
     if (this.pacman.turning !== Phaser.NONE) {
       this.turn(this.pacman);
     }
+
+    _.each(this.ghosts, function (ghost) {
+      this.selectGhostDirection(ghost);
+    }, this)
   },
   checkKeys: function () {
     if (this.cursors.left.isDown && this.pacman.currentDirection !== Phaser.LEFT) {
@@ -90,6 +105,10 @@ LevelRoundState.prototype = {
       sprite.body.velocity.x = 0;
     }
     spriteContainer.currentDirection = direction;
+
+    if (!spriteContainer.rotateImage) {
+      return;
+    }
 
     sprite.angle = 0;
 
@@ -169,6 +188,52 @@ LevelRoundState.prototype = {
     spriteContainer.turning = Phaser.NONE;
 
     return true;
+  },
+  createGhosts: function () {
+    if (!this.ghostsSprites) {
+      this.ghostsSprites = this.game.add.group();
+    }
+
+    _.each(this.ghosts, function (ghost, i) {
+      ghost.sprite = this.ghostsSprites.create((12 + i) * 16 + 8, 11 * 16 + 8, 'ghosts', 0);
+      ghost.sprite.anchor.set(0.5);
+      ghost.sprite.animations.add('move', [i * 12 + 2, i * 12 + 3], 8, true);
+      ghost.sprite.play('move');
+      this.physics.arcade.enable(ghost.sprite);
+
+      this.move(ghost, i % 2 + 1);
+    }, this)
+  },
+  changeGhostDirection: function (ghost) {
+    var direction = _.sample([Phaser.RIGHT, Phaser.LEFT, Phaser.DOWN, Phaser.UP]);
+    this.move({sprite: ghost}, direction);
+  },
+  selectGhostDirection: function (spriteContainer) {
+    this.computeSpriteDirections(spriteContainer);
+    var marker = spriteContainer.marker;
+    var prevMarker = spriteContainer.prevMarker;
+
+    if (!this.checkAvalibleDirections(spriteContainer) || (marker.x == prevMarker.x && marker.y == prevMarker.y)) {
+      return;
+    }
+
+    var direction = _.sample(spriteContainer.avalibleDirections);
+    this.checkDirection(spriteContainer, direction);
+
+    if (spriteContainer.turning !== Phaser.NONE && this.turn(spriteContainer)) {
+      spriteContainer.prevMarker = _.clone(spriteContainer.marker);
+    }
+  },
+  checkAvalibleDirections: function (spriteContainer) {
+    spriteContainer.avalibleDirections = [];
+
+    for (var i = 1; i <= 4; i++) {
+      if (spriteContainer.directions[i] && spriteContainer.directions[i].index == this.safeTile) {
+        spriteContainer.avalibleDirections.push(i);
+      }
+    }
+
+    return spriteContainer.avalibleDirections.length > 2;
   }
 }
 
@@ -178,7 +243,10 @@ var generateSpriteContainer = function () {
     currentDirection: Phaser.NONE,
     directions: new Array(5),
     marker: new Phaser.Point(),
+    prevMarker: new Phaser.Point(1, 1),
     turningPoint: new Phaser.Point(),
-    turning: Phaser.NONE
+    turning: Phaser.NONE,
+    rotateImage: false,
+    avalibleDirections: []
   }
 }
