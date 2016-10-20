@@ -11,6 +11,8 @@ LevelRoundState.prototype = {
     this.opposites = [Phaser.NONE, Phaser.RIGHT, Phaser.LEFT, Phaser.DOWN, Phaser.UP];
     this.ghosts = [];
     this.ghostsSprites = null;
+    this.lives = null;
+    this.livesCount = 3;
 
     for(var i = 0; i < 4; i++) {
       this.ghosts.push(generateSpriteContainer());
@@ -57,6 +59,7 @@ LevelRoundState.prototype = {
     this.cursors = this.input.keyboard.createCursorKeys();
 
     this.printScore();
+    this.printLives();
 
     this.move(this.pacman, Phaser.RIGHT);
   },
@@ -65,6 +68,7 @@ LevelRoundState.prototype = {
     this.physics.arcade.collide(this.ghostsSprites, this.layer, this.changeGhostDirection, null, this);
     this.physics.arcade.overlap(this.pacman.sprite, this.dots, this.eatDot, null, this);
     this.physics.arcade.overlap(this.pacman.sprite, this.bigDots, this.eatBigDot, null, this);
+    this.physics.arcade.overlap(this.pacman.sprite, this.ghostsSprites, this.pacmanGhostOverlap, null, this);
 
     this.computeSpriteDirections(this.pacman);
 
@@ -76,7 +80,10 @@ LevelRoundState.prototype = {
 
     _.each(this.ghosts, function (ghost) {
       this.selectGhostDirection(ghost);
+      this.detectBoundCollision(ghost);
     }, this)
+
+    this.detectBoundCollision(this.pacman);
   },
   checkKeys: function () {
     if (this.cursors.left.isDown && this.pacman.currentDirection !== Phaser.LEFT) {
@@ -126,9 +133,22 @@ LevelRoundState.prototype = {
     this.printScore();
   },
   eatBigDot: function(_pacman, dot) {
+    var self = this;
     dot.kill();
-    this.score += 100;
-    this.printScore();
+
+    this.ghostsSprites.callAll('animations.play', 'animations', 'moveHighlighted');
+
+    setTimeout(function () {
+      self.ghostsSprites.forEach(function (ghost) {
+        if (ghost.animations.currentAnim.name == 'moveHighlighted') {
+          ghost.play('moveHighlightedEnd');
+        }
+      })
+    }, 5000)
+
+    setTimeout(function () {
+      self.ghostsSprites.callAll('animations.play', 'animations', 'move');
+    }, 8000)
   },
   printScore: function() {
     if (!this.scoreText) {
@@ -198,6 +218,8 @@ LevelRoundState.prototype = {
       ghost.sprite = this.ghostsSprites.create((12 + i) * 16 + 8, 11 * 16 + 8, 'ghosts', 0);
       ghost.sprite.anchor.set(0.5);
       ghost.sprite.animations.add('move', [i * 12 + 2, i * 12 + 3], 8, true);
+      ghost.sprite.animations.add('moveHighlighted', [8, 9], 8, true);
+      ghost.sprite.animations.add('moveHighlightedEnd', [8, 11, 10, 9], 8, true);
       ghost.sprite.play('move');
       this.physics.arcade.enable(ghost.sprite);
 
@@ -234,6 +256,58 @@ LevelRoundState.prototype = {
     }
 
     return spriteContainer.avalibleDirections.length > 2;
+  },
+  pacmanGhostOverlap: function (_pacman, ghost) {
+    if (ghost.animations.currentAnim.name == 'move') {
+      this.killPacman();
+    } else {
+      this.killGhost(ghost);
+    }
+  },
+  killPacman: function () {
+    this.livesCount--;
+    this.lives.removeChildAt(this.lives.countLiving() - 1);
+
+    if (this.livesCount === 0) {
+      this.restartGame();
+    }
+
+    this.pacman.sprite.x = 14 * 16 + 8;
+    this.pacman.sprite.y = 17 * 16 + 8;
+
+    _.each(this.ghosts, function (ghost, i) {
+      ghost.sprite.x = (12 + i) * 16 + 8;
+      ghost.sprite.y = 11 * 16 + 8;
+    })
+  },
+  killGhost: function (ghost) {
+    this.score += 200;
+    this.printScore();
+    ghost.x = 14 * 16 + 8;
+    ghost.y = 11 * 16 + 8;
+    ghost.play('move');
+  },
+  printLives: function () {
+    if (!this.lives) {
+      this.lives = this.game.add.group();
+      this.game.add.text(300, this.game.height - 28, 'Lives: ', { fontSize: '16px', fill: '#FFF' });
+    }
+
+    for (var i = 0; i < this.livesCount; i++) {
+      this.lives.create(this.game.width - 90 + i * 30, this.game.height - 26, 'pacman');
+    }
+  },
+  restartGame: function () {
+    this.game.state.start('level-round');
+  },
+  detectBoundCollision: function (spriteContainer) {
+    var sprite = spriteContainer.sprite;
+
+    if (sprite.x < 0 || sprite.x > this.game.width) {
+      sprite.x = Math.abs(sprite.x - this.game.width);
+    } else if (sprite.y < 0 || sprite.y > (this.game.height - 32)) {
+      sprite.y = Math.abs(sprite.y - (this.game.height - 32));
+    }
   }
 }
 
